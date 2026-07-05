@@ -11,7 +11,6 @@ import yaml
 from matplotlib.animation import FuncAnimation, PillowWriter
 from tqdm import trange
 
-
 from gcbfplus.algo import make_algo
 from gcbfplus.env import make_env
 from gcbfplus.utils.graph import GraphsTuple
@@ -23,31 +22,28 @@ from gcbfplus.utils.graph import GraphsTuple
 
 @dataclass
 class Args:
-    # Environment
-    env: str = "DoubleIntegrator" # Dynamics
-    algo: str = "gcbf_diffuser" # Algorithm
-    num_agents: int = 8 # Number of agents
-    obs: int = 0 # No obstacle
-    area_size: float = 4.0 # Area of the drone workspace in the lab
-    max_step: int = 400 # Time Horizon
+    env: str = "DoubleIntegrator"
+    algo: str = "gcbf_diffuser"
+
+    num_agents: int = 8
+    obs: int = 0
+    area_size: float = 4.0
+    max_step: int = 400
     max_travel: Optional[float] = None
 
-    # Pretrained model
     path: str = (
-        "/home/sharma/Projects/gcbfplus/pretrained_diffuser/" #change
+        "/home/sharma/Projects/gcbfplus/pretrained_diffuser/"
         "DoubleIntegrator/gcbfdiffuser"
-    ) # location of pretrained models
+    )
     step: Optional[int] = None
 
-    # Runtime
     seed: int = 1234
     debug: bool = False
     cpu: bool = False
 
-    # Position exchange
+    # Circular position-exchange task
     radius_ratio: float = 0.35
 
-    # Outputs
     save_animation: bool = True
     animation_file: str = "position_swap_graph.gif"
     results_file: str = "position_swap_graph.npz"
@@ -59,14 +55,11 @@ class Args:
 
 
 # ============================================================
-# GRAPH HELPERS
+# GRAPH / NODE HELPERS
 # ============================================================
 
 def get_agent_ids(graph: GraphsTuple, num_agents: int) -> jnp.ndarray:
-    """
-    Assumption:
-        node_type == 0 corresponds to drone / agent nodes.
-    """
+    """Agents use node_type == 0."""
     return jnp.where(
         graph.node_type == 0,
         size=num_agents,
@@ -75,10 +68,7 @@ def get_agent_ids(graph: GraphsTuple, num_agents: int) -> jnp.ndarray:
 
 
 def get_goal_ids(graph: GraphsTuple, num_agents: int) -> jnp.ndarray:
-    """
-    Assumption:
-        node_type == 1 corresponds to goal nodes.
-    """
+    """Goals are assumed to use node_type == 1."""
     return jnp.where(
         graph.node_type == 1,
         size=num_agents,
@@ -92,9 +82,8 @@ def make_position_swap_configuration(
     radius_ratio: float,
 ):
     """
-    Place N drones on a circle.
-
-    Drone i receives the target occupied initially by drone i + N/2.
+    Agent i starts on a circle and targets the location initially
+    occupied by agent i + N/2.
     """
     center = jnp.array([
         area_size / 2.0,
@@ -104,8 +93,7 @@ def make_position_swap_configuration(
     radius = radius_ratio * area_size
 
     theta = (
-        2.0
-        * jnp.pi
+        2.0 * jnp.pi
         * jnp.arange(num_agents)
         / num_agents
     )
@@ -133,19 +121,25 @@ def set_position_swap_graph(
     radius_ratio: float,
 ):
     """
-    Overwrite the reset graph with a deterministic circular
-    position-exchange configuration.
+    Replaces random agent positions/goals with deterministic
+    position-exchange initialization.
 
-    Agent states:
+    Agent state:
         [x, y, vx, vy]
 
-    Goal states:
-        [goal_x, goal_y, 0, 0]
+    Goal state:
+        [gx, gy, 0, 0]
     """
     n_agents = env.num_agents
 
     agent_ids = get_agent_ids(graph, n_agents)
     goal_ids = get_goal_ids(graph, n_agents)
+
+    if np.any(np.asarray(goal_ids) == 0) and n_agents > 1:
+        raise RuntimeError(
+            "Goal nodes were not found as node_type == 1. "
+            "Print graph.node_type and update get_goal_ids()."
+        )
 
     start_xy, goal_xy = make_position_swap_configuration(
         num_agents=n_agents,
@@ -172,18 +166,13 @@ def set_position_swap_graph(
     new_states = graph.states.at[agent_ids].set(agent_states)
     new_states = new_states.at[goal_ids].set(goal_states)
 
-    # Recalculate edge features after changing agent and goal states.
     graph_new = env.add_edge_feats(graph, new_states)
 
     return graph_new, start_xy, goal_xy
 
 
 def snapshot_graph(graph: GraphsTuple):
-    """
-    Save the graph data needed for visualisation.
-
-    We save it as NumPy because the animation runs outside JAX.
-    """
+    """Convert graph values to NumPy for animation."""
     return {
         "states": np.asarray(graph.states).copy(),
         "node_type": np.asarray(graph.node_type).copy(),
@@ -192,62 +181,102 @@ def snapshot_graph(graph: GraphsTuple):
     }
 
 
-def unique_undirected_edges(senders, receivers):
-    """
-    Convert directed edge pairs into unique undirected pairs.
+# ============================================================
+# EDGE HELPERS FOR ANIMATION
+# ============================================================
 
-    Example:
-        1 -> 4 and 4 -> 1
-    become:
-        (1, 4)
+def active_agent_edges(
+    agent_xy: np.ndarray,
+    comm_radius: float,
+):
     """
+    Exact DoubleIntegrator rule:
+
+        edge(i, j) exists when ||p_i - p_j|| < comm_radius
+
+    Returns undirected visual edges.
+    """
+    n_agents = agent_xy.shape[0]
+    edges = []
+
+    for i in range(n_agents):
+        for j in range(i + 1, n_agents):
+            distance = np.linalg.norm(
+                agent_xy[i] - agent_xy[j]
+            )
+
+            if distance < comm_radius:
+                edges.append((i, j))
+
+    return edges
+
+
+def active_edges_from_snapshot(graph_snapshot):
+    """
+    Remove dummy-node edges.
+
+    In GraphsTuple.to_padded(), inactive edges are redirected
+    to a padding node with node_type == -1.
+    """
+    node_type = graph_snapshot["node_type"]
+    senders = graph_snapshot["senders"]
+    receivers = graph_snapshot["receivers"]
+
+    valid_mask = (
+        (node_type[senders] != -1)
+        & (node_type[receivers] != -1)
+    )
+
+    return senders[valid_mask], receivers[valid_mask]
+
+
+def unique_undirected_edges(senders, receivers):
+    """Merge directed pairs i->j and j->i into one visual edge."""
     edges = set()
 
     for sender, receiver in zip(senders, receivers):
         sender = int(sender)
         receiver = int(receiver)
 
-        if sender == receiver:
-            continue
-
-        edges.add(tuple(sorted((sender, receiver))))
+        if sender != receiver:
+            edges.add(tuple(sorted((sender, receiver))))
 
     return list(edges)
 
 
-def split_graph_edges(graph_snapshot):
+def split_graph_goal_edges(graph_snapshot):
     """
-    Separate graph edges into:
+    Extract only active agent-goal graph edges.
 
-    green_edges:
-        agent <-> goal links
-
-    black_edges:
-        agent <-> agent proximity / communication links
+    node_type:
+        0 = agent
+        1 = goal
+       -1 = padding
     """
     node_type = graph_snapshot["node_type"]
-    senders = graph_snapshot["senders"]
-    receivers = graph_snapshot["receivers"]
 
-    green_edges = []
-    black_edges = []
+    senders, receivers = active_edges_from_snapshot(
+        graph_snapshot
+    )
 
-    for sender, receiver in unique_undirected_edges(senders, receivers):
+    goal_edges = []
+
+    for sender, receiver in unique_undirected_edges(
+        senders,
+        receivers,
+    ):
         sender_type = node_type[sender]
         receiver_type = node_type[receiver]
 
-        # Agent-goal edge.
-        if (
+        is_agent_goal = (
             (sender_type == 0 and receiver_type == 1)
             or (sender_type == 1 and receiver_type == 0)
-        ):
-            green_edges.append((sender, receiver))
+        )
 
-        # Agent-agent proximity edge.
-        elif sender_type == 0 and receiver_type == 0:
-            black_edges.append((sender, receiver))
+        if is_agent_goal:
+            goal_edges.append((sender, receiver))
 
-    return green_edges, black_edges
+    return goal_edges
 
 
 # ============================================================
@@ -255,9 +284,7 @@ def split_graph_edges(graph_snapshot):
 # ============================================================
 
 def pairwise_min_distance(agent_states: np.ndarray) -> float:
-    """
-    Return smallest pairwise planar distance between all drones.
-    """
+    """Smallest planar centre-to-centre separation."""
     xy = agent_states[:, :2]
     n_agents = xy.shape[0]
 
@@ -272,7 +299,7 @@ def pairwise_min_distance(agent_states: np.ndarray) -> float:
 
 
 # ============================================================
-# ORIGINAL STATE TRAJECTORY ROLLOUT
+# PERFECT-STATE SIMULATION ROLLOUT
 # ============================================================
 
 def rollout_position_swap_original_dynamics(
@@ -283,30 +310,23 @@ def rollout_position_swap_original_dynamics(
     radius_ratio: float,
 ):
     """
-    Original GCBF+ simulation:
+    Original simulator loop:
 
-        true graph
-            -> policy
-            -> action
-            -> env.step(...)
-            -> next true graph
+        graph_t
+          -> policy(graph_t)
+          -> env.step(graph_t, action_t)
+          -> graph_{t+1}
 
-    No noisy estimates.
-    No delay.
-    No hardware model.
+    No Vicon estimates, no delay, and no added noise.
     """
-
-    # Environment creates initial graph.
     graph_true = env.reset(key)
 
-    # Replace random initialization with circular position exchange.
     graph_true, start_xy, goal_xy = set_position_swap_graph(
         env=env,
         graph=graph_true,
         radius_ratio=radius_ratio,
     )
 
-    # Extract agent IDs
     agent_ids = get_agent_ids(
         graph_true,
         env.num_agents,
@@ -331,10 +351,8 @@ def rollout_position_swap_original_dynamics(
     ]
 
     for _ in trange(rollout_length, ncols=80):
-        # The policy receives the exact original graph.
         action = act_fn(graph_true)
 
-        # Original DoubleIntegrator simulation.
         graph_next, reward, cost, done, info = env.step(
             graph_true,
             action,
@@ -367,12 +385,10 @@ def rollout_position_swap_original_dynamics(
         if bool(np.any(np.asarray(done))):
             break
 
-    true_states = np.stack(true_states_log, axis=0)
-
     return {
         "start_xy": np.asarray(start_xy),
         "goal_xy": np.asarray(goal_xy),
-        "true_states": true_states,
+        "true_states": np.stack(true_states_log, axis=0),
         "actions": np.stack(actions_log, axis=0),
         "rewards": np.stack(rewards_log, axis=0),
         "costs": np.stack(costs_log, axis=0),
@@ -385,29 +401,21 @@ def rollout_position_swap_original_dynamics(
 
 
 # ============================================================
-# GRAPH ANIMATION (function to generate positions wapping animation)
+# ANIMATION
 # ============================================================
 
 def animate_position_swap_graph(
     results,
     area_size: float,
     filename: str,
+    comm_radius: float,
     interval_ms: int = 50,
 ):
     """
-    Animation style:
-
-    Blue nodes:
-        drones / agents
-
-    Green nodes:
-        assigned goals
-
-    Green edges:
-        agent-goal task edges
-
-    Black edges:
-        active agent-agent proximity graph edges
+    Blue circles: agents
+    Green circles: goals
+    Green lines: permanent agent-goal graph edges
+    Black lines: dynamic communication edges
     """
     graph_log = results["graph_log"]
     true_xy = results["true_states"][:, :, :2]
@@ -416,11 +424,17 @@ def animate_position_swap_graph(
     n_agents = true_xy.shape[1]
 
     first_graph = graph_log[0]
-
     first_states = first_graph["states"]
     first_node_type = first_graph["node_type"]
 
     goal_ids = np.where(first_node_type == 1)[0]
+
+    if len(goal_ids) != n_agents:
+        raise RuntimeError(
+            f"Expected {n_agents} goal nodes, found {len(goal_ids)}. "
+            "Check goal node type."
+        )
+
     goal_xy = first_states[goal_ids, :2]
 
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -431,15 +445,12 @@ def animate_position_swap_graph(
 
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
-
     ax.set_title(
         "GCBF-Diffuser Position Exchange with Dynamic Graph Edges"
     )
-
     ax.grid(True, alpha=0.25)
 
-    # Green goal nodes.
-    goal_scatter = ax.scatter(
+    ax.scatter(
         goal_xy[:, 0],
         goal_xy[:, 1],
         s=180,
@@ -450,7 +461,6 @@ def animate_position_swap_graph(
         label="Goals",
     )
 
-    # Blue agent nodes.
     agent_scatter = ax.scatter(
         true_xy[0, :, 0],
         true_xy[0, :, 1],
@@ -462,7 +472,6 @@ def animate_position_swap_graph(
         label="Agents",
     )
 
-    # Drone ID labels.
     agent_labels = []
 
     for i in range(n_agents):
@@ -479,7 +488,6 @@ def animate_position_swap_graph(
         )
         agent_labels.append(label)
 
-    # Trajectory lines.
     trajectory_lines = []
 
     for i in range(n_agents):
@@ -491,10 +499,8 @@ def animate_position_swap_graph(
             linewidth=1.0,
             zorder=1,
         )
-
         trajectory_lines.append(line)
 
-    # Edge lists get redrawn each frame.
     goal_line_artists = []
     proximity_line_artists = []
 
@@ -504,7 +510,7 @@ def animate_position_swap_graph(
         "",
         transform=ax.transAxes,
         verticalalignment="top",
-        fontsize=12,
+        fontsize=11,
         bbox={
             "boxstyle": "round",
             "facecolor": "white",
@@ -512,7 +518,6 @@ def animate_position_swap_graph(
         },
     )
 
-    # Legend placeholders.
     ax.plot(
         [],
         [],
@@ -526,7 +531,7 @@ def animate_position_swap_graph(
         [],
         color="black",
         linewidth=1.5,
-        label="Proximity edges",
+        label="Communication edges",
     )
 
     ax.legend(loc="lower right")
@@ -556,33 +561,26 @@ def animate_position_swap_graph(
         agent_ids = np.where(node_type == 0)[0]
         agent_xy = states[agent_ids, :2]
 
-        # Move blue agent markers.
         agent_scatter.set_offsets(agent_xy)
 
-        # Move labels.
         for i, label in enumerate(agent_labels):
             label.set_position(
-                (
-                    agent_xy[i, 0],
-                    agent_xy[i, 1],
-                )
+                (agent_xy[i, 0], agent_xy[i, 1])
             )
 
-        # Extend trajectories.
         for i, line in enumerate(trajectory_lines):
             line.set_data(
                 true_xy[:frame + 1, i, 0],
                 true_xy[:frame + 1, i, 1],
             )
 
-        # Remove prior edge lines.
         remove_current_edges()
 
-        green_edges, black_edges = split_graph_edges(
+        # Permanent green agent-goal edges from graph topology.
+        green_edges = split_graph_goal_edges(
             current_graph
         )
 
-        # Permanent task / goal edges.
         for sender, receiver in green_edges:
             p_sender = states[sender, :2]
             p_receiver = states[receiver, :2]
@@ -598,14 +596,20 @@ def animate_position_swap_graph(
 
             goal_line_artists.append(line)
 
-        # Dynamic close-proximity / communication edges.
-        for sender, receiver in black_edges:
-            p_sender = states[sender, :2]
-            p_receiver = states[receiver, :2]
+        # Black communication edges use exactly:
+        # distance < env._params["comm_radius"]
+        black_edges = active_agent_edges(
+            agent_xy=agent_xy,
+            comm_radius=comm_radius,
+        )
+
+        for i, j in black_edges:
+            p_i = agent_xy[i]
+            p_j = agent_xy[j]
 
             line, = ax.plot(
-                [p_sender[0], p_receiver[0]],
-                [p_sender[1], p_receiver[1]],
+                [p_i[0], p_j[0]],
+                [p_i[1], p_j[1]],
                 color="black",
                 alpha=0.70,
                 linewidth=1.5,
@@ -627,12 +631,13 @@ def animate_position_swap_graph(
             f"Cost: {float(np.asarray(cost)):.4f}, "
             f"Reward: {float(np.asarray(reward)):.4f}\n"
             f"Unsafe: {bool(np.any(np.asarray(unsafe)))}\n"
-            f"kk={frame:04d}\n"
-            f"Min dist: {results['min_distance'][frame]:.3f}"
+            f"Step: {frame:04d}\n"
+            f"Min distance: "
+            f"{results['min_distance'][frame]:.3f} m\n"
+            f"Comm radius: {comm_radius:.3f} m"
         )
 
         return [
-            goal_scatter,
             agent_scatter,
             status_text,
             *agent_labels,
@@ -650,16 +655,16 @@ def animate_position_swap_graph(
         blit=False,
     )
 
-    fps = max(1, int(1000 / interval_ms))
-
     animation.save(
         filename,
-        writer=PillowWriter(fps=fps),
+        writer=PillowWriter(
+            fps=max(1, int(1000 / interval_ms))
+        ),
     )
 
     plt.close(fig)
 
-    print(f"Saved graph animation: {filename}")
+    print(f"Saved animation: {filename}")
 
 
 # ============================================================
@@ -691,7 +696,7 @@ def test(args: Args):
         )
 
     env = make_env(
-        env_id=config.env if args.env is None else args.env,
+        env_id=config.env,
         num_agents=args.num_agents,
         num_obs=args.obs,
         area_size=args.area_size,
@@ -699,10 +704,7 @@ def test(args: Args):
         max_travel=args.max_travel,
     )
 
-    model_path = os.path.join(
-        args.path,
-        "models",
-    )
+    model_path = os.path.join(args.path, "models")
 
     if args.step is None:
         checkpoints = [
@@ -711,9 +713,9 @@ def test(args: Args):
             if name.isdigit()
         ]
 
-        if len(checkpoints) == 0:
+        if not checkpoints:
             raise FileNotFoundError(
-                f"No numeric checkpoints found in: {model_path}"
+                f"No numeric checkpoint folders found in: {model_path}"
             )
 
         step = max(checkpoints)
@@ -723,7 +725,7 @@ def test(args: Args):
     print("Loading model checkpoint:", step)
 
     algo = make_algo(
-        algo=config.algo,
+        algo=args.algo,
         env=env,
         node_dim=env.node_dim,
         edge_dim=env.edge_dim,
@@ -749,7 +751,6 @@ def test(args: Args):
 
     algo.load(model_path, step)
 
-    # Exact original policy.
     act_fn = jax.jit(algo.act)
 
     debug_graph = env.reset(
@@ -758,14 +759,16 @@ def test(args: Args):
 
     print("\nGraph diagnostics:")
     print("states shape:", debug_graph.states.shape)
-    # print("node_type:", np.asarray(debug_graph.node_type))
+    print("node types:", np.unique(
+        np.asarray(debug_graph.node_type)
+    ))
     print(
-        "unique node types:",
-        np.unique(np.asarray(debug_graph.node_type)),
+        "comm_radius:",
+        float(env._params["comm_radius"]),
     )
     print(
-        "number of graph edges:",
-        len(np.asarray(debug_graph.senders)),
+        "car_radius:",
+        float(env._params["car_radius"]),
     )
 
     results = rollout_position_swap_original_dynamics(
@@ -787,8 +790,7 @@ def test(args: Args):
         float(np.min(results["min_distance"])),
     )
 
-    # graph_log is not saved because each time step can have a
-    # different number of proximity edges.
+    # graph_log has variable edge count, so do not save it to NPZ.
     results_to_save = {
         key: value
         for key, value in results.items()
@@ -807,6 +809,7 @@ def test(args: Args):
             results=results,
             area_size=args.area_size,
             filename=args.animation_file,
+            comm_radius=float(env._params["comm_radius"]),
             interval_ms=50,
         )
 
