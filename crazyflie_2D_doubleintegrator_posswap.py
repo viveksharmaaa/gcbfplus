@@ -46,6 +46,11 @@ class Args:
 
     save_animation: bool = True
     animation_file: str = "position_swap_graph.gif"
+
+    # Per-agent minimum-distance plot
+    save_distance_plot: bool = True
+    distance_plot_file: str = "per_agent_min_distance.png"
+
     results_file: str = "position_swap_graph.npz"
 
     def __post_init__(self):
@@ -298,6 +303,86 @@ def pairwise_min_distance(agent_states: np.ndarray) -> float:
     return float(minimum_distance)
 
 
+def per_agent_min_distance(agent_states: np.ndarray) -> np.ndarray:
+    """
+    For each agent i, return its minimum planar center-to-center
+    distance to any other agent j != i.
+
+    Output shape:
+        (num_agents,)
+    """
+    xy = agent_states[:, :2]
+    n_agents = xy.shape[0]
+
+    min_distances = np.full(n_agents, np.inf)
+
+    for i in range(n_agents):
+        for j in range(n_agents):
+            if i == j:
+                continue
+
+            distance = np.linalg.norm(xy[i] - xy[j])
+            min_distances[i] = min(min_distances[i], distance)
+
+    return min_distances
+
+
+def plot_per_agent_min_distance(
+    results,
+    dt: float,
+    car_radius: float,
+    filename: str,
+):
+    """
+    Plot one curve per agent:
+
+        d_i(t) = min_{j != i} ||p_i(t) - p_j(t)||.
+
+    The dashed red line is the physical collision boundary:
+
+        d_collision = 2 * car_radius.
+    """
+    distances = results["per_agent_min_distance"]
+    n_steps, n_agents = distances.shape
+    time = np.arange(n_steps) * dt
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+
+    for i in range(n_agents):
+        ax.plot(
+            time,
+            distances[:, i],
+            linewidth=2.0,
+            label=str(i),
+        )
+
+    ax.axhline(
+        2.0 * car_radius,
+        color="red",
+        linestyle="--",
+        linewidth=2.0,
+        label="Collision boundary",
+    )
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Min distance (m)")
+    ax.set_title("Minimum Distance to Other Agents")
+    ax.grid(True, alpha=0.30)
+
+    ax.legend(
+        title="Agent",
+        ncol=2,
+        fontsize=9,
+        loc="upper right",
+    )
+
+    fig.tight_layout()
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Saved minimum-distance plot: {filename}")
+
+
 # ============================================================
 # PERFECT-STATE SIMULATION ROLLOUT
 # ============================================================
@@ -350,6 +435,10 @@ def rollout_position_swap_original_dynamics(
         pairwise_min_distance(initial_agent_states)
     ]
 
+    per_agent_min_distance_log = [
+        per_agent_min_distance(initial_agent_states)
+    ]
+
     for _ in trange(rollout_length, ncols=80):
         action = act_fn(graph_true)
 
@@ -380,6 +469,10 @@ def rollout_position_swap_original_dynamics(
             pairwise_min_distance(next_agent_states)
         )
 
+        per_agent_min_distance_log.append(
+            per_agent_min_distance(next_agent_states)
+        )
+
         graph_true = graph_next
 
         if bool(np.any(np.asarray(done))):
@@ -396,6 +489,10 @@ def rollout_position_swap_original_dynamics(
         "unsafe": np.stack(unsafe_log, axis=0),
         "finish": np.stack(finish_log, axis=0),
         "min_distance": np.asarray(min_distance_log),
+        "per_agent_min_distance": np.stack(
+            per_agent_min_distance_log,
+            axis=0,
+        ),
         "graph_log": graph_log,
     }
 
@@ -813,6 +910,14 @@ def test(args: Args):
             interval_ms=50,
         )
 
+    if args.save_distance_plot:
+        plot_per_agent_min_distance(
+            results=results,
+            dt=float(env.dt),
+            car_radius=float(env._params["car_radius"]),
+            filename=args.distance_plot_file,
+        )
+
     return results
 
 
@@ -835,8 +940,10 @@ if __name__ == "__main__":
         ),
         radius_ratio=0.35,
         save_animation=True,
-        animation_file="position_swap_graph.gif",
-        results_file="position_swap_graph.npz",
+        animation_file="crazyflie_2D_doubleintegrator_position_swap.gif",
+        save_distance_plot=True,
+        distance_plot_file="crazyflie_2D_doubleintegrator_per_agent_min_distance.png",
+        results_file="crazyflie_2D_doubleintegrator_position_swap.npz",
     )
 
     results = test(args)

@@ -154,8 +154,8 @@ We highly recommend retraining a model yourself.
 
 ### Hardware testing
 
-To test the framework on crazyflie, first run ['experiment_cfs_graphvis'](experiment_cfs_graphvis.py) which generates a joint control policy of all agents for Double Integrator dynamics.
-This standalone script file has necessary functions to query joint control action given states in GraphsTuple format and other environment helper functions. It simulates the position swapping manuever for a swarm of `8` agents in 2D plane.
+To test the framework on crazyflie, first run ['crazyflie_2D_doubleintegrator_posswap'](crazyflie_2D_doubleintegrator_posswap.py) which generates a joint control policy of all agents assuming Double Integrator dynamics for each crazyflie.
+This standalone script file has necessary functions to query joint control action given states in GraphsTuple format and other environment helper functions. It simulates the position swapping manuever for a swarm of `8` agents in 2D plane following the hardware implementation discussed in GCBF+ paper.
 
 The template for interfacing with ROS nodes is provided at ['crazyflie_gcbfplus_placeholder'](crazyflie_gcbfplus_placeholder.py) and will need to be customized for running the hardware experiments.
 
