@@ -906,7 +906,7 @@ def test(args: Args):
             results=results,
             area_size=args.area_size,
             filename=args.animation_file,
-            comm_radius=float(env._params["comm_radius"]),
+            comm_radius=float(env._params["comm_radius"]), # Maximum distance at which two agents are connected in the  communication / interaction graph. A black graph edge is drawn when:  ||p_i - p_j|| < comm_radius
             interval_ms=50,
         )
 
@@ -914,7 +914,7 @@ def test(args: Args):
         plot_per_agent_min_distance(
             results=results,
             dt=float(env.dt),
-            car_radius=float(env._params["car_radius"]),
+            car_radius=float(env._params["car_radius"]), # Physical radius of one agent in the DoubleIntegrator environment. The plot uses 2 * car_radius as the centre-to-centre collision distance: two circular agents touch when their centres are separated by this amount.
             filename=args.distance_plot_file,
         )
 
