@@ -1,6 +1,6 @@
 <div align="center">
 
-# GCBF_diffuser
+# Graph Barrier-Guided Diffusion for Safe Multi-Robot Control
 
 [//]: # ([![Paper]&#40;https://img.shields.io/badge/T--RO-Accepted-success&#41;]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;)
 
@@ -12,18 +12,29 @@
 
 </div>
 
-[//]: # (A much improved version of [GCBFv0]&#40;https://mit-realm.github.io/gcbf-website/&#41;!)
 
-[//]: # (<div align="center">)
+<div align="center">
 
+
+## F-16 Formation Control
+
+<p align="center">
+  <img src="media/f16_formation_control.gif" width="700">
+</p>
+
+[//]: # ()
 [//]: # (    <img src="./media/cbf1.gif" alt="LidarSpread" width="24.55%"/>)
 
+[//]: # ()
 [//]: # (    <img src="./media/DoubleIntegrator_512_2x.gif" alt="LidarLine" width="24.55%"/>)
 
+[//]: # ()
 [//]: # (    <img src="./media/Obstacle2D_32.gif" alt="VMASReverseTransport" width="24.55%"/>)
 
+[//]: # ()
 [//]: # (    <img src="./media/Obstacle2D_512_2x.gif" alt="VMASWheel" width="24.55%"/>)
 
+[//]: # ()
 [//]: # (</div>)
 
 ## Dependencies
@@ -31,9 +42,9 @@
 We recommend to use [CONDA](https://www.anaconda.com/) to install the requirements:
 
 ```bash
-conda create -n gcbfplus python=3.10
-conda activate gcbfplus
-cd gcbfplus
+conda create -n GBDiff python=3.10
+conda activate GBDiff
+cd GBDiff
 ```
 
 Then install jax following the [official instructions](https://github.com/google/jax#installation), and then install the rest of the dependencies:
@@ -43,7 +54,7 @@ pip install -r requirements.txt
 
 ## Installation
 
-Install GCBF: 
+Install GBDiff: 
 
 ```bash
 pip install -e .
@@ -53,11 +64,11 @@ pip install -e .
 
 ### Environments
 
-We provide 3 2D environments including `SingleIntegrator`, `DoubleIntegrator`, and `DubinsCar`, and 2 3D environments including `LinearDrone` and `CrazyFlie`.
+We provide 3 2D environments including `SingleIntegrator`, `DoubleIntegrator`, and `DubinsCar`, and 3 3D environments including `LinearDrone`,`CrazyFlie` and `F16`.
 
 ### Algorithms
 
-We provide algorithms including  GCBFdiffuser(`gcbf_diffuser`), GCBF+ (`gcbf+`), GCBF (`gcbf`), centralized CBF-QP (`centralized_cbf`), and decentralized CBF-QP (`dec_share_cbf`). Use `--algo` to specify the algorithm. 
+We provide algorithms including  GBDiff(``), GCBFdiffuser(`gcbf_diffuser`), GCBF+ (`gcbf+`), GCBF (`gcbf`), centralized CBF-QP (`centralized_cbf`), and decentralized CBF-QP (`dec_share_cbf`). Use `--algo` to specify the algorithm. 
 
 ### Hyper-parameters
 
@@ -65,7 +76,7 @@ To reproduce the results shown in our paper, one can refer to [`settings.yaml`](
 
 ### Train
 
-To train the model (only GCBFdiffuser, GCBF+ and GCBF need training), use:
+To train the model (only GBDiff, GCBF+ and GCBF need training), use:
 
 ```bash
 python train.py --algo gcbf+ --env DoubleIntegrator -n 8 --area-size 4 --loss-action-coef 1e-4 --n-env-train 16 --lr-actor 1e-5 --lr-cbf 1e-5 --horizon 32
@@ -91,8 +102,8 @@ In our paper, we use 8 agents with 1000 training steps. The training logs will b
 - `--save-interval`: interval of saving the model
 
 In addition, use the following flags to specify the hyper-parameters:
-- `--alpha`: GCBF alpha
-- `--horizon`: GCBF+ look forward horizon
+- `--alpha`: GBDiff alpha
+- `--horizon`: GBDiff look forward horizon
 - `--lr-actor`: learning rate of the actor
 - `--lr-cbf`: learning rate of the CBF
 - `--loss-action-coef`: coefficient of the action loss
@@ -146,7 +157,7 @@ To test the CBF-QPs, use:
 python test.py --env SingleIntegrator -n 16 --algo dec_share_cbf --epi 1 --area-size 4 --obs 0 --alpha 1
 ```
 
-### Pre-trained models for GCBF Diffuser
+### Pre-trained models for GBF Diffuser
 
 We provide pre-trained models in folder [`pretrained_diffuser`](pretrained_diffuser). However, their performance may depend on the GPU/CUDA/Jax versions. 
 We highly recommend retraining a model yourself.

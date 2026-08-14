@@ -352,6 +352,173 @@ class GCBFPlus(GCBF):
 
         return u_opt, r
 
+    def evaluate_qp_teacher_training(
+            self,
+            key: PRNGKey,
+            rollout_length: Optional[int] = None,
+            relax_penalty: float = 1e3,
+    ) -> dict:
+        """
+        Periodically evaluate the current learned-CBF QP teacher during training.
+
+        This rollout uses get_qp_action() instead of the learned actor.
+        """
+
+        if rollout_length is None:
+            rollout_length = self._env._max_step
+
+        graph = self._env.reset(key)
+
+        finish_history = []
+        unsafe_history = []
+        goal_error_history = []
+        min_distance_history = []
+        relaxation_history = []
+
+        # Use current target CBF parameters at this training checkpoint.
+        cbf_params = self.cbf_tgt.params
+
+        qp_fn = jax.jit(
+            lambda g: self.get_qp_action(
+                g,
+                relax_penalty=relax_penalty,
+                cbf_params=cbf_params,
+            )
+        )
+
+        for _ in range(rollout_length):
+
+            # QP teacher action, not actor action
+            action, relaxation = qp_fn(graph)
+
+            graph, reward, cost, done, info = self._env.step(
+                graph,
+                action,
+                get_eval_info=True,
+            )
+
+            agent_state = graph.type_states(
+                type_idx=0,
+                n_type=self.n_agents,
+            )
+
+            goal_state = graph.type_states(
+                type_idx=1,
+                n_type=self.n_agents,
+            )
+
+            position = agent_state[:, :2]
+            goal_position = goal_state[:, :2]
+
+            goal_error = jnp.linalg.norm(
+                position - goal_position,
+                axis=-1,
+            )
+
+            pairwise_distance = jnp.linalg.norm(
+                position[:, None, :]
+                - position[None, :, :],
+                axis=-1,
+            )
+
+            pairwise_distance = pairwise_distance.at[
+                jnp.diag_indices(self.n_agents)
+            ].set(jnp.inf)
+
+            finish = self._env.finish_mask(graph)
+            unsafe = self._env.unsafe_mask(graph)
+
+            finish_history.append(
+                np.asarray(jax.device_get(finish))
+            )
+
+            unsafe_history.append(
+                np.asarray(jax.device_get(unsafe))
+            )
+
+            goal_error_history.append(
+                np.asarray(jax.device_get(goal_error))
+            )
+
+            min_distance_history.append(
+                float(
+                    jax.device_get(
+                        jnp.min(pairwise_distance)
+                    )
+                )
+            )
+
+            relaxation_history.append(
+                np.asarray(jax.device_get(relaxation))
+            )
+
+            if bool(np.any(np.asarray(jax.device_get(done)))):
+                break
+
+        finish_history = np.stack(
+            finish_history,
+            axis=0,
+        ).astype(bool)
+
+        unsafe_history = np.stack(
+            unsafe_history,
+            axis=0,
+        ).astype(bool)
+
+        goal_error_history = np.stack(
+            goal_error_history,
+            axis=0,
+        )
+
+        relaxation_history = np.stack(
+            relaxation_history,
+            axis=0,
+        )
+
+        final_finish = finish_history[-1]
+        final_goal_error = goal_error_history[-1]
+
+        return {
+            "ever_unsafe": bool(
+                np.any(unsafe_history)
+            ),
+
+            # Fraction of agents at their goals at final time
+            "finish_fraction_final": float(
+                np.mean(final_finish)
+            ),
+
+            # Whether every agent is at its goal at final time
+            "all_finished_final": bool(
+                np.all(final_finish)
+            ),
+
+            # Whether all agents were simultaneously finished at any time
+            "all_finished_at_any_time": bool(
+                np.any(
+                    np.all(
+                        finish_history,
+                        axis=-1,
+                    )
+                )
+            ),
+            "mean_final_goal_error": float(
+                np.mean(final_goal_error)
+            ),
+
+            "max_final_goal_error": float(
+                np.max(final_goal_error)
+            ),
+
+            "minimum_pairwise_distance": float(
+                np.min(min_distance_history)
+            ),
+
+            "maximum_relaxation": float(
+                np.max(relaxation_history)
+            ),
+        }
+
     @ft.partial(jax.jit, static_argnums=(0,), donate_argnums=(1, 2))
     def update_inner(
             self, cbf_train_state: TrainState, actor_train_state: TrainState, batch: Batch

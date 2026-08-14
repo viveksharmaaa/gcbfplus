@@ -6,7 +6,8 @@ from .double_integrator import DoubleIntegrator
 from .linear_drone import LinearDrone
 from .dubins_car import DubinsCar
 from .crazyflie import CrazyFlie
-
+from .quadcopter import Quadcopter
+from .double_integrator_3d import DoubleIntegrator3D
 
 ENV = {
     'SingleIntegrator': SingleIntegrator,
@@ -14,11 +15,12 @@ ENV = {
     'LinearDrone': LinearDrone,
     'DubinsCar': DubinsCar,
     'CrazyFlie': CrazyFlie,
+    'Quadcopter': Quadcopter,
+    'Holonomic3D' : DoubleIntegrator3D,
 }
 
 
-DEFAULT_MAX_STEP = 256
-
+DEFAULT_MAX_STEP = 256 #256
 
 def make_env(
         env_id: str,

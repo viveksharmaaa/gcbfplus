@@ -33,12 +33,12 @@ class DoubleIntegrator(MultiAgentEnv):
     EnvGraphsTuple = GraphsTuple[State, EnvState]
 
     PARAMS = {
-        "car_radius": 0.05,
-        "comm_radius": 0.5,
+        "car_radius": 0.1, #0.08
+        "comm_radius": 0.8, #1.2 or 0.8
         "n_rays": 32,
         "obs_len_range": [0.1, 0.5],
-        "n_obs": 8,
-        "m": 0.1,  # mass
+        "n_obs": 0,
+        "m": 0.03,  # mass
     }
 
     def __init__(
@@ -103,18 +103,30 @@ class DoubleIntegrator(MultiAgentEnv):
         # states, goals = get_node_goal_rng(
         #     key, self.area_size, 2, obstacles, self.num_agents, 4 * self.params["car_radius"], self.max_travel)
 
-        # position swap
         states, goals = get_node_goal_rng(
-            key,
-            self.area_size,
-            2,
-            obstacles,
-            self.num_agents,
-            4 * self.params["car_radius"],
-            self.max_travel,
+            key=key,
+            area_size=self.area_size,
+            dim=2,
+            obstacles=obstacles,
+            n_nodes=self.num_agents,
+            min_dist=4 * self.params["car_radius"],
+            max_travel=self.max_travel,
             position_swap=True,
-            swap_radius=0.35 * self.area_size,
+            position_jitter=0.03,
+            rotation_jitter=False,
         )
+
+
+        # states, goals = get_node_goal_rng(
+        #     key=key,
+        #     side_length=self.area_size,
+        #     dim=2,
+        #     obstacles=obstacles,
+        #     n=self.num_agents,
+        #     min_dist=4 * self.params["car_radius"],
+        #     max_travel=self.max_travel,
+        #     position_swap=False,
+        #     swap_radius=1)
 
         # add zero velocity
         states = jnp.concatenate([states, jnp.zeros((self.num_agents, 2))], axis=1)
@@ -333,13 +345,13 @@ class DoubleIntegrator(MultiAgentEnv):
         ).to_padded()
 
     def state_lim(self, state: Optional[State] = None) -> Tuple[State, State]:
-        lower_lim = jnp.array([-jnp.inf, -jnp.inf, -0.5, -0.5])
-        upper_lim = jnp.array([jnp.inf, jnp.inf, 0.5, 0.5])
+        lower_lim = jnp.array([-jnp.inf, -jnp.inf, -1.0, -1.0])
+        upper_lim = jnp.array([jnp.inf, jnp.inf, 1.0, 1.0])
         return lower_lim, upper_lim
 
     def action_lim(self) -> Tuple[Action, Action]:
-        lower_lim = jnp.ones(2) * -1.0
-        upper_lim = jnp.ones(2)
+        lower_lim = jnp.ones(2) * -1.0 *0.03 *2.5  #* 0.015
+        upper_lim = jnp.ones(2) *0.03 *2.5 #* 0.015
         return lower_lim, upper_lim
 
     def u_ref(self, graph: GraphsTuple) -> Action:

@@ -365,9 +365,6 @@ class GCBFdiffuser(GCBF):
             control_sequence=controls,
             cbf_params=cbf_params,
         )
-
-
-
         h_now = h_traj[:-1]
         h_next = h_traj[1:]
 
