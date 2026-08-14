@@ -204,6 +204,14 @@ This standalone script file has necessary functions to query joint control actio
 
 The template for interfacing with ROS nodes is provided at ['crazyflie_gcbfplus_placeholder'](crazyflie_gcbfplus_placeholder.py) and will need to be customized for running the hardware experiments.
 
+### References
+
+This repository builds upon and modifies the implementation of **GCBF+**:
+
+> S. Zhang, O. So, K. Garg, and C. Fan,**"GCBF+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multiagent Control,"**  
+> *IEEE Transactions on Robotics*, vol. 41, pp. 1533–1552, 2025.
+
+Original implementation: [GCBF+](https://github.com/MIT-REALM/gcbfplus)
 
 [//]: # (## Citation)
 
