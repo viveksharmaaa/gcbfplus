@@ -8,3 +8,4 @@ videos/
 wandb/
 test_log.csv
 *.egg-info*.blend1
+extra/
