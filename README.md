@@ -64,8 +64,10 @@
 
 ## Multi-modal crazyflies position swap
 
-<img src="./media/crazyflie_cen_demonstration.gif" alt="cen" width="40.55%"/>
-<img src="./media/crazyflie_decen_demonstration.gif" alt="cen" width="40.55%"/>
+<img src="./media/crazyflie_cen_demonstration.gif" alt="cen" width="30.55%"/>
+<img src="./media/crazyflie_decen_demonstration.gif" alt="cen" width="30.55%"/>
+
+Datasets for training are provided here [datasets](datasets)
 
 
 ## Dependencies
@@ -212,8 +214,7 @@ The template for interfacing with ROS nodes is provided at ['crazyflie_GBDiff_pl
 
 This repository builds upon and modifies the implementation of **GCBF+**:
 
-> S. Zhang, O. So, K. Garg, and C. Fan,**"GCBF+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multiagent Control,"**  
-> *IEEE Transactions on Robotics*, vol. 41, pp. 1533–1552, 2025.
+> S. Zhang, O. So, K. Garg, and C. Fan,**"GCBF+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multiagent Control,"** *IEEE Transactions on Robotics*, vol. 41, pp. 1533–1552, 2025.
 
 Original implementation: [GCBF+](https://github.com/MIT-REALM/gcbfplus)
 
