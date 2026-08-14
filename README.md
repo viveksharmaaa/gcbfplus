@@ -2,6 +2,8 @@
 
 # Graph Barrier-Guided Diffusion for Safe Multi-Robot Control
 
+![RA-L](https://img.shields.io/badge/T--RO-Under%20Review-yellow)
+
 [//]: # ([![Paper]&#40;https://img.shields.io/badge/T--RO-Accepted-success&#41;]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;)
 [//]: # (      <span style="background-color:#e6f4ea; color:green;">green region</span>)
 [//]: # (Jax Official Implementation of T-RO Paper: [Songyuan Zhang*]&#40;https://syzhang092218-source.github.io&#41;, [Oswin So*]&#40;https://oswinso.xyz/&#41;, [Kunal Garg]&#40;https://kunalgarg.mit.edu/&#41;, and [Chuchu Fan]&#40;https://chuchu.mit.edu&#41;: "[GCBF+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multi-Agent Control]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;". )
@@ -82,7 +84,7 @@ pip install -r requirements.txt
 ```
 
 ## Installation
-Install F-16 from PyPI:
+To train policy for fleet of F-16s, please install [jax version of F-16](https://github.com/MIT-REALM/jax-f16/tree/main) from PyPI:
 
 ```bash
 pip install jax-f16
@@ -199,10 +201,12 @@ We highly recommend retraining a model yourself.
 
 ### Hardware testing
 
-To test the framework on crazyflie, first run ['crazyflie_2D_doubleintegrator_posswap'](crazyflie_2D_doubleintegrator_posswap.py) which generates a joint control policy of all agents assuming Double Integrator dynamics for each crazyflie.
-This standalone script file has necessary functions to query joint control action given states in GraphsTuple format and other environment helper functions. It simulates the position swapping manuever for a swarm of `8` agents in 2D plane following the hardware implementation discussed in GCBF+ paper.
+The ROS 2 Humble workspace for testing simple classical and TorchScript/GNN swarm policies against the Crazyswarm2 Crazyflies is here : [crazyswarm_gnn_testing](https://github.com/prachitgupta/crazyswarm_gnn_testing/tree/main) 
 
-The template for interfacing with ROS nodes is provided at ['crazyflie_gcbfplus_placeholder'](crazyflie_gcbfplus_placeholder.py) and will need to be customized for running the hardware experiments.
+To test the framework on crazyflie, first run ['crazyflie_2D_doubleintegrator_posswap'](crazyflie_2D_doubleintegrator_posswap.py) which generates a joint control policy of all agents assuming Double Integrator dynamics for each crazyflie.
+This standalone script file has necessary functions to query joint control action given states in GraphsTuple format and other environment helper functions. It simulates the position swapping manuever for a swarm of `8` agents in 2D plane following the hardware implementation discussed in the paper.
+
+The template for interfacing with ROS nodes is provided at ['crazyflie_GBDiff_placeholder'](crazyflie_gcbfplus_placeholder.py) and will need to be customized for running your hardware experiments.
 
 ### References
 
@@ -213,38 +217,3 @@ This repository builds upon and modifies the implementation of **GCBF+**:
 
 Original implementation: [GCBF+](https://github.com/MIT-REALM/gcbfplus)
 
-[//]: # (## Citation)
-
-[//]: # ()
-[//]: # (```)
-
-[//]: # (@ARTICLE{zhang2025gcbf+,)
-
-[//]: # (      author={Zhang, Songyuan and So, Oswin and Garg, Kunal and Fan, Chuchu},)
-
-[//]: # (      journal={IEEE Transactions on Robotics}, )
-
-[//]: # (      title={{GCBF}+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multiagent Control}, )
-
-[//]: # (      year={2025},)
-
-[//]: # (      volume={41},)
-
-[//]: # (      pages={1533-1552},)
-
-[//]: # (      doi={10.1109/TRO.2025.3530348})
-
-[//]: # (})
-
-[//]: # (```)
-
-[//]: # (## Acknowledgement)
-
-[//]: # ()
-[//]: # (The developers were partially supported by MITRE during the project.)
-
-[//]: # ()
-[//]: # (© 2024 MIT)
-
-[//]: # ()
-[//]: # (© 2024 The MITRE Corporation)
