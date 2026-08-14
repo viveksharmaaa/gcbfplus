@@ -60,6 +60,12 @@
 [//]: # ()
 [//]: # (</div>)
 
+## Multi-modal crazyflies position swap
+
+<img src="./media/crazyflie_cen_demonstration.gif" alt="cen" width="40.55%"/>
+<img src="./media/cen_demonstration.gif" alt="cen" width="40.55%"/>
+
+
 ## Dependencies
 
 We recommend to use [CONDA](https://www.anaconda.com/) to install the requirements:
@@ -76,8 +82,13 @@ pip install -r requirements.txt
 ```
 
 ## Installation
+Install F-16 from PyPI:
 
-Install GBDiff: 
+```bash
+pip install jax-f16
+```
+
+Next, install GBDiff: 
 
 ```bash
 pip install -e .
@@ -91,7 +102,7 @@ We provide 3 2D environments including `SingleIntegrator`, `DoubleIntegrator`, a
 
 ### Algorithms
 
-We provide algorithms including  GBDiff(``), GCBFdiffuser(`gcbf_diffuser`), GCBF+ (`gcbf+`), GCBF (`gcbf`), centralized CBF-QP (`centralized_cbf`), and decentralized CBF-QP (`dec_share_cbf`). Use `--algo` to specify the algorithm. 
+We provide algorithms including  GBDiff(`gcbf_diffuser`), GCBF+ (`gcbf+`), GCBF (`gcbf`), centralized CBF-QP (`centralized_cbf`), and decentralized CBF-QP (`dec_share_cbf`). Use `--algo` to specify the algorithm. 
 
 ### Hyper-parameters
 
