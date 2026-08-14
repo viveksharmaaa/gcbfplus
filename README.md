@@ -63,7 +63,7 @@
 ## Multi-modal crazyflies position swap
 
 <img src="./media/crazyflie_cen_demonstration.gif" alt="cen" width="40.55%"/>
-<img src="./media/cen_demonstration.gif" alt="cen" width="40.55%"/>
+<img src="./media/crazyflie_decen_demonstration.gif" alt="cen" width="40.55%"/>
 
 
 ## Dependencies
