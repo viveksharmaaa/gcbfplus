@@ -2,7 +2,7 @@
 
 # Graph Barrier-Guided Diffusion for Safe Multi-Robot Control
 
-![RA-L](https://img.shields.io/badge/T--RO-Under%20Review-yellow)
+![RA-L](https://img.shields.io/badge/R--AL-Under%20Review-yellow)
 
 [//]: # ([![Paper]&#40;https://img.shields.io/badge/T--RO-Accepted-success&#41;]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;)
 [//]: # (      <span style="background-color:#e6f4ea; color:green;">green region</span>)
@@ -62,10 +62,12 @@
 [//]: # ()
 [//]: # (</div>)
 
-## Multi-modal crazyflies position swap
+## Multi-modal Crazyflie Position Swap
 
-<img src="./media/crazyflie_cen_demonstration.gif" alt="cen" width="30.55%"/>
-<img src="./media/crazyflie_decen_demonstration.gif" alt="cen" width="30.55%"/>
+<p align="center">
+  <img src="./media/crazyflie_cen_demonstration.gif" alt="Centralized" width="48%"/>
+  <img src="./media/crazyflie_decen_demonstration.gif" alt="Decentralized" width="48%"/>
+</p>
 
 Datasets for training are provided here [datasets](datasets)
 
