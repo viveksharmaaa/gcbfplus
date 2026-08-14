@@ -88,10 +88,10 @@ pip install -r requirements.txt
 ```
 
 ## Installation
-To train policy for fleet of F-16s, please install [jax version of F-16](https://github.com/MIT-REALM/jax-f16/tree/main) from PyPI:
+To train policy for fleet of F-16s, please install [jax version of F-16](https://github.com/MIT-REALM/jax-f16/tree/main) :
 
 ```bash
-pip install jax-f16
+pip install --upgrade git+https://github.com/mit-realm/jax-f16.git
 ```
 
 Next, install GBDiff: 
