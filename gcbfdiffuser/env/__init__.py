@@ -8,6 +8,7 @@ from .dubins_car import DubinsCar
 from .crazyflie import CrazyFlie
 from .quadcopter import Quadcopter
 from .double_integrator_3d import DoubleIntegrator3D
+from .f16_env import F16Env
 
 ENV = {
     'SingleIntegrator': SingleIntegrator,
@@ -17,10 +18,11 @@ ENV = {
     'CrazyFlie': CrazyFlie,
     'Quadcopter': Quadcopter,
     'Holonomic3D' : DoubleIntegrator3D,
+    'F16': F16Env
 }
 
 
-DEFAULT_MAX_STEP = 256 #256
+DEFAULT_MAX_STEP = 256
 
 def make_env(
         env_id: str,
