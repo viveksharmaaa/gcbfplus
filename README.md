@@ -3,7 +3,7 @@
 # Graph Barrier-Guided Diffusion for Safe Multi-Robot Control
 
 [//]: # ([![Paper]&#40;https://img.shields.io/badge/T--RO-Accepted-success&#41;]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;)
-
+[//]: # (      <span style="background-color:#e6f4ea; color:green;">green region</span>)
 [//]: # (Jax Official Implementation of T-RO Paper: [Songyuan Zhang*]&#40;https://syzhang092218-source.github.io&#41;, [Oswin So*]&#40;https://oswinso.xyz/&#41;, [Kunal Garg]&#40;https://kunalgarg.mit.edu/&#41;, and [Chuchu Fan]&#40;https://chuchu.mit.edu&#41;: "[GCBF+: A Neural Graph Control Barrier Function Framework for Distributed Safe Multi-Agent Control]&#40;https://mit-realm.github.io/gcbfplus-website/&#41;". )
 
 [Dependencies](#Dependencies) •
@@ -12,7 +12,34 @@
 
 </div>
 
-## F-16 Formation Control
+## F-16 Formation Control with Graph Barrier-Guided Diffuser
+
+<h3 align="center"></h3>
+
+<table>
+  <tr>
+    <td><b><font color="green">Nominal</font></b></td>
+    <td>
+      Fly toward the goal while maintaining the desired four-aircraft formation.
+    </td>
+  </tr>
+
+  <tr>
+    <td><b><font color="darkred">Avoid</font></b></td>
+    <td>
+      Avoid inter-aircraft collisions, obstacles, and corridor boundaries
+      (floor, ceiling, and side walls).
+    </td>
+  </tr>
+
+  <tr>
+    <td><b><font color="blue">Maneuver</font></b></td>
+    <td>
+      Perform coordinated pitch, roll, climb, descent, and lateral avoidance
+      maneuvers while preserving formation and progressing toward the goal.
+    </td>
+  </tr>
+</table>
 
 <p align="center">
   <img src="media/f16_formation_control.gif" width="700">
