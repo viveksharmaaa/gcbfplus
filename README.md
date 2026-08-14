@@ -12,10 +12,6 @@
 
 </div>
 
-
-<div align="center">
-
-
 ## F-16 Formation Control
 
 <p align="center">
