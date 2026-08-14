@@ -108,7 +108,7 @@ We provide 3 2D environments including `SingleIntegrator`, `DoubleIntegrator`, a
 
 ### Algorithms
 
-We provide algorithms including  GBDiff(`gcbf_diffuser`), GCBF+ (`gcbf+`), GCBF (`gcbf`), centralized CBF-QP (`centralized_cbf`), and decentralized CBF-QP (`dec_share_cbf`). Use `--algo` to specify the algorithm. 
+We provide algorithms including   GBDiff ([`gcbf_diffuser`](./gcbfdiffuser/algo/gcbf_diffuser.py)), GCBF+ ([`gcbf+`](./gcbfdiffuser/algo/gcbf_plus.py)), GCBF ([`gcbf`](./gcbfdiffuser/algo/gcbf.py)), centralized CBF-QP ([`centralized_cbf`](./gcbfdiffuser/algo/centralized_cbf.py)), and decentralized CBF-QP ([`dec_share_cbf`](./gcbfdiffuser/algo/dec_share_cbf.py)). Use `--algo` to specify the algorithm. 
 
 ### Hyper-parameters
 
@@ -122,10 +122,10 @@ To train the model (only GBDiff, GCBF+ and GCBF need training), use:
 python train.py --algo gcbf+ --env DoubleIntegrator -n 8 --area-size 4 --loss-action-coef 1e-4 --n-env-train 16 --lr-actor 1e-5 --lr-cbf 1e-5 --horizon 32
 ```
 
-In our paper, we use 8 agents with 1000 training steps. The training logs will be saved in folder `./logs/<env>/<algo>/seed<seed>_<training-start-time>`. We also provide the following flags:
+In our paper, we use `8` agents with `1000` training steps. The training logs will be saved in folder `./logs/<env>/<algo>/seed<seed>_<training-start-time>`. We also provide the following flags:
 
 - `-n`: number of agents
-- `--env`: environment, including `SingleIntegrator`, `DoubleIntegrator`, `DubinsCar`, `LinearDrone`, and `CrazyFlie`
+- `--env`: environment, including `SingleIntegrator`, `DoubleIntegrator`, `DubinsCar`, `LinearDrone`, `CrazyFlie`,and `F16`.
 - `--algo`: algorithm, including `gcbf`, `gcbf+`
 - `--seed`: random seed
 - `--steps`: number of training steps
@@ -201,6 +201,20 @@ python test.py --env SingleIntegrator -n 16 --algo dec_share_cbf --epi 1 --area-
 
 We provide pre-trained models in folder [`pretrained_diffuser`](pretrained_diffuser). However, their performance may depend on the GPU/CUDA/Jax versions. 
 We highly recommend retraining a model yourself.
+
+### Training GBDiff on F-16 Fleets
+
+To train GBDiff for a fleet of F-16 aircraft, you must  install the JAX implementation of the F-16 dynamics from [jax-f16](https://github.com/MIT-REALM/jax-f16):
+
+Training on the F-16 environment is substantially more computationally demanding than the point-mass or Crazyflie environments because each rollout evaluates the nonlinear 16-state aircraft dynamics, the low-level flight controller, and RK4 integration over multiple diffusion samples and prediction steps.
+
+We recommend a GPU with at least **24 GB of memory**; **24 GB or more** is preferable for larger fleets or longer diffusion horizons. If GPU memory is less than  **24 GB** , reduce the number of agents, diffusion samples, rollout horizon, or training batch size.
+
+Unlike the control-affine environments, the F-16 dynamics are propagated directly through model-based forward simulation. Control-affine approximations are only required for comparison with centralized CBF-QP and decentralzied or GCBF baselines that assume dynamics of the form
+
+$$
+\dot{x} = f(x) + g(x)u.
+$$
 
 
 ### Hardware testing

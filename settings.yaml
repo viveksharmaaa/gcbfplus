@@ -38,3 +38,11 @@ CrazyFlie:
   --n-env-train: 16
   --horizon: 32
   --area-size: 2
+F16Env:
+  --env: F16Env
+  --lr-actor: 1e-6
+  --lr-cbf: 1e-5
+  --loss-action-coef: 2e-6
+  --n-env-train: 4
+  --horizon: 32
+  --area-size: 8000
