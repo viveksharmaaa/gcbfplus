@@ -132,7 +132,129 @@ def raytracing(starts: Pos, ends: Pos, obstacles: Obstacle, max_returns: int) ->
     return hitting_points[alphas_return]
 
 
+
 def get_node_goal_rng(
+    key: PRNGKey,
+    area_size: float,
+    dim:int,
+    obstacles : Obstacle,
+    n_nodes:int,
+    min_dist:float=None,
+    max_travel:float =None,
+    position_swap:bool=False,
+    position_jitter:float =0.0,
+    rotation_jitter:bool=False,
+): #-> tuple[Array, Array] | tuple[Array, Array]:
+
+
+    """
+    Generate initial positions and goals.
+
+    When position_swap=True, use the fixed 8-agent hardware
+    configuration and assign opposite swap goals.
+    """
+
+    if position_swap:
+        if n_nodes != 8:
+            raise ValueError(
+                "The fixed position-swap configuration requires 8 agents."
+            )
+
+        if dim != 2:
+            raise ValueError(
+                "The fixed position-swap configuration is defined in 2D."
+            )
+
+        # Coordinates centered at the workspace origin.
+        # For area_size=2.0, these become positions inside [0, 2]^2.
+        centered_xy = jnp.array(
+            [
+                [-1, -1],  # cf1
+                [-1,  1],  # cf2
+                [ 1,  1],  # cf3
+                [ 1, -1],  # cf4
+                [ 0.00, -0.707],  # cf5
+                [-0.707,  0.00],  # cf6
+                [ 0.00,  0.707],  # cf7
+                [ 0.707,  0.00],  # cf8
+            ],
+            dtype=jnp.float32,
+        )
+
+        # Optional random global rotation during training.
+        if rotation_jitter:
+            key, rotation_key = jr.split(key)
+
+            angle = jr.uniform(
+                rotation_key,
+                shape=(),
+                minval=-jnp.pi,
+                maxval=jnp.pi,
+            )
+
+            rotation_matrix = jnp.array(
+                [
+                    [jnp.cos(angle), -jnp.sin(angle)],
+                    [jnp.sin(angle),  jnp.cos(angle)],
+                ],
+                dtype=jnp.float32,
+            )
+
+            centered_xy = centered_xy @ rotation_matrix.T
+
+        # Optional independent perturbation of each initial position.
+        if position_jitter > 0.0:
+            key, jitter_key = jr.split(key)
+
+            jitter = jr.uniform(
+                jitter_key,
+                shape=centered_xy.shape,
+                minval=-position_jitter,
+                maxval=position_jitter,
+            )
+
+            centered_xy = centered_xy + jitter
+
+        # Shift coordinates from a centered frame into [0, area_size]^2.
+        center = jnp.ones((2,), dtype=jnp.float32) * (
+            area_size / 2.0
+        )
+
+        states = centered_xy + center
+
+        # Keep agents away from the exact workspace boundary.
+        boundary_margin = min_dist / 2.0
+
+        states = jnp.clip(
+            states,
+            boundary_margin,
+            area_size - boundary_margin,
+        )
+
+        # Swap pairs:
+        # cf1 <-> cf3
+        # cf2 <-> cf4
+        # cf5 <-> cf7
+        # cf6 <-> cf8
+        swap_indices = jnp.array(
+            [
+                2,
+                3,
+                0,
+                1,
+                6,
+                7,
+                4,
+                5,
+            ],
+            dtype=jnp.int32,
+        )
+
+        goals = states[swap_indices]
+
+        return states, goals
+
+def get_node_goal_rng_(
         key: PRNGKey,
         side_length: float,
         dim: int,
@@ -140,30 +262,134 @@ def get_node_goal_rng(
         n: int,
         min_dist: float,
         max_travel: float = None,
-        position_swap: bool = False,
+        position_swap: bool = True,
         swap_radius: float = None,
 ) -> tuple[Array, Array] | tuple[Array, Array]:
 
-    # --------------------------------------------------------
-    # Fixed circular position-swap setup
-    # --------------------------------------------------------
-
     if position_swap:
-        print("Position swap enabled")
-        assert dim == 2, "Position swap setup assumes 2D positions."
-        assert n % 2 == 0, "Need an even number of drones for opposite swapping."
+        assert dim == 2, "Position-swap setup assumes 2D positions."
+        assert n % 2 == 0, (
+            "An even number of drones is required for opposite swapping."
+        )
 
         if swap_radius is None:
             swap_radius = 0.35 * side_length
 
-        center = jnp.array([
-            side_length / 2.0,
-            side_length / 2.0,
-        ])
+        # Training randomization parameters.
+        radius_range = (0.90, 1.10)
+        center_jitter = 0.03
+        angle_jitter = 0.05
+        position_jitter = 0.01
 
-        theta = 2.0 * jnp.pi * jnp.arange(n) / n
+        (
+            key_rotation,
+            key_radius,
+            key_center,
+            key_angle,
+            key_position,
+        ) = jax.random.split(key, 5)
 
-        states = center + swap_radius * jnp.stack(
+        # Randomly rotate the entire formation.
+        global_rotation = jax.random.uniform(
+            key_rotation,
+            shape=(),
+            minval=0.0,
+            maxval=2.0 * jnp.pi,
+        )
+
+        # Randomize the circle radius.
+        radius_scale = jax.random.uniform(
+            key_radius,
+            shape=(),
+            minval=radius_range[0],
+            maxval=radius_range[1],
+        )
+        radius = swap_radius * radius_scale
+
+        # Keep the complete circle inside the workspace.
+        workspace_margin = min_dist / 2.0 + position_jitter
+        center_lower = radius + workspace_margin
+        center_upper = side_length - radius - workspace_margin
+
+        nominal_center = jnp.array(
+            [side_length / 2.0, side_length / 2.0]
+        )
+
+        center_offset = jax.random.uniform(
+            key_center,
+            shape=(2,),
+            minval=-center_jitter,
+            maxval=center_jitter,
+        )
+
+        center = jnp.clip(
+            nominal_center + center_offset,
+            center_lower,
+            center_upper,
+        )
+
+        n_half = n // 2
+        nominal_angle_gap = 2.0 * jnp.pi / n
+
+        # Account for the worst-case reduction in pairwise distance caused
+        # by Cartesian position perturbations.
+        required_chord_distance = (
+                min_dist
+                + 2.0 * jnp.sqrt(2.0) * position_jitter
+        )
+
+        required_angle_gap = 2.0 * jnp.arcsin(
+            jnp.clip(
+                required_chord_distance / (2.0 * radius),
+                0.0,
+                1.0 - 1e-6,
+            )
+        )
+
+        # Two adjacent angular perturbations can reduce their angular gap by
+        # at most 2 * allowed_angle_jitter.
+        safe_angle_jitter = jnp.maximum(
+            0.0,
+            0.5 * (nominal_angle_gap - required_angle_gap),
+        )
+
+        allowed_angle_jitter = jnp.minimum(
+            angle_jitter,
+            safe_angle_jitter,
+        )
+
+        # Generate only one half of the circle.
+        base_half_angles = (
+                2.0
+                * jnp.pi
+                * jnp.arange(n_half)
+                / n
+        )
+
+        half_angle_noise = jax.random.uniform(
+            key_angle,
+            shape=(n_half,),
+            minval=-allowed_angle_jitter,
+            maxval=allowed_angle_jitter,
+        )
+
+        first_half_theta = (
+                base_half_angles
+                + global_rotation
+                + half_angle_noise
+        )
+
+        # Copy the first half after exactly pi radians. This guarantees that
+        # agent i and agent i + n/2 remain diametrically opposite.
+        theta = jnp.concatenate(
+            [
+                first_half_theta,
+                first_half_theta + jnp.pi,
+            ],
+            axis=0,
+        )
+
+        states = center + radius * jnp.stack(
             [
                 jnp.cos(theta),
                 jnp.sin(theta),
@@ -171,14 +397,24 @@ def get_node_goal_rng(
             axis=1,
         )
 
-        # Drone i targets the initial position of drone i+n/2.
-        goals = jnp.roll(states, shift=n // 2, axis=0)
+        # Add small hardware initialization errors while preserving the
+        # minimum-distance margin used above.
+        states = states + jax.random.uniform(
+            key_position,
+            shape=(n, 2),
+            minval=-position_jitter,
+            maxval=position_jitter,
+        )
 
+        # Agent i targets the perturbed initial position of its opposite
+        # agent i + n/2.
+        goals = jnp.roll(
+            states,
+            shift=n_half,
+            axis=0,
+        )
         return states, goals
 
-    # --------------------------------------------------------
-    # Original random-reset code unchanged below
-    # --------------------------------------------------------
 
     max_iter = 1024  # maximum number of iterations to find a valid initial state/goal
     states = jnp.zeros((n, dim))
@@ -262,6 +498,60 @@ def get_node_goal_rng(
 
     _, _, states, goals = while_loop(
         cond_fun=reset_not_terminate, body_fun=reset_body, init_val=(0, key, states, goals))
+
+
+    return states, goals
+
+
+def get_node_goal_rng_old(
+        key: PRNGKey,
+        side_length: float,
+        dim: int,
+        obstacles: Obstacle,
+        n: int,
+        min_dist: float,
+        max_travel: float = None,
+        position_swap: bool = False,
+        swap_radius: float = None,
+) -> tuple[Array, Array] | tuple[Array, Array]:
+
+    # --------------------------------------------------------
+    # Fixed circular position-swap setup
+    # --------------------------------------------------------
+
+    if position_swap:
+        print("Position swap enabled")
+        assert dim == 2, "Position swap setup assumes 2D positions."
+        assert n % 2 == 0, "Need an even number of drones for opposite swapping."
+
+        if swap_radius is None:
+            swap_radius = 0.35 * side_length
+
+        center = jnp.array([
+            side_length / 2.0,
+            side_length / 2.0,
+        ])
+
+        theta = 2.0 * jnp.pi * jnp.arange(n) / n
+
+        states = center + swap_radius * jnp.stack(
+            [
+                jnp.cos(theta),
+                jnp.sin(theta),
+            ],
+            axis=1,
+        )
+
+        # Drone i targets the initial position of drone i+n/2.
+        goals = jnp.roll(states, shift=n // 2, axis=0)
+
+        return states, goals
+
+
+    # --------------------------------------------------------
+    # Original random-reset code unchanged below
+    # --------------------------------------------------------
+
 
     return states, goals
 

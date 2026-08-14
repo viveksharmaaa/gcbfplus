@@ -11,41 +11,41 @@ from gcbfplus.env import make_env
 from gcbfplus.trainer.trainer import Trainer
 from gcbfplus.trainer.utils import is_connected
 
-class Args:
-    # custom arguments
-    num_agents = 8
-    algo = "gcbf+"
-    env = "DoubleIntegrator"
-    seed = 0
-    steps = 1000
-    name = None
-    debug = False
-    obs = None
-    n_rays = 32
-    area_size = 10   # required before → now set manually
-
-    # gcbf / gcbf+ arguments
-    gnn_layers = 1
-    alpha = 1.0
-    horizon = 32
-    lr_actor = 3e-5
-    lr_cbf = 3e-5
-    loss_action_coef = 0.0001
-    loss_unsafe_coef = 1.0
-    loss_safe_coef = 1.0
-    loss_h_dot_coef = 0.01
-    buffer_size = 512
-
-    # default arguments
-    n_env_train = 16
-    n_env_test = 32
-    log_dir = "./logs"
-    eval_interval = 1
-    eval_epi = 1
-    save_interval = 10
-
-
-args = Args()
+# class Args:
+#     # custom arguments
+#     num_agents = 8
+#     algo = "gcbf+"
+#     env = "DoubleIntegrator"
+#     seed = 0
+#     steps = 1000
+#     name = None
+#     debug = False
+#     obs = None
+#     n_rays = 32
+#     area_size = 10   # required before → now set manually
+#
+#     # gcbf / gcbf+ arguments
+#     gnn_layers = 1
+#     alpha = 1.0
+#     horizon = 32
+#     lr_actor = 3e-5
+#     lr_cbf = 3e-5
+#     loss_action_coef = 0.0001
+#     loss_unsafe_coef = 1.0
+#     loss_safe_coef = 1.0
+#     loss_h_dot_coef = 0.01
+#     buffer_size = 512
+#
+#     # default arguments
+#     n_env_train = 16
+#     n_env_test = 32
+#     log_dir = "./logs"
+#     eval_interval = 1
+#     eval_epi = 1
+#     save_interval = 10
+#
+#
+# args = Args()
 
 
 def train(args):
@@ -68,6 +68,7 @@ def train(args):
         n_rays=args.n_rays,
         area_size=args.area_size
     )
+    print(env.params)
     env_test = make_env(
         env_id=args.env,
         num_agents=args.num_agents,
@@ -75,7 +76,35 @@ def train(args):
         n_rays=args.n_rays,
         area_size=args.area_size
     )
+#######################################################################################
+    dt = float(env_test.dt)
+    horizon = int(env_test._max_step)
 
+    rollout_time = dt * horizon
+
+    radius = 1.0
+    travel_distance = 2.0 * radius
+
+    # Set this according to the actual dynamics.
+    max_acceleration = 0.5  # if u is directly acceleration
+    # max_acceleration = 0.015 / 0.03  # if u is force
+
+    minimum_time = 2.0 * np.sqrt(
+        travel_distance / max_acceleration
+    )
+
+    print("Rollout duration:", rollout_time, "s")
+    print("Ideal minimum travel time:", minimum_time, "s")
+    print(
+        "Time margin:",
+        rollout_time / minimum_time
+    )
+
+    # margin < 1.0 physically impossible
+    # margin 1.0–1.5 likely insufficient
+    # with avoidance margin 1.5–2.0 tight
+    # margin > 2.0 generally reasonable
+#####################################################################################################
     # create low level controller
     algo = make_algo(
         algo=args.algo,
@@ -143,7 +172,7 @@ def train(args):
         with open(f"{log_dir}/config.yaml", "w") as f:
             yaml.dump(args, f)
             yaml.dump(algo.config, f)
-
+            yaml.dump(env.params, f)
     # start training
     trainer.train()
 
@@ -181,7 +210,7 @@ def main():
     parser.add_argument("--log-dir", type=str, default="./logs")
     parser.add_argument("--eval-interval", type=int, default=1)
     parser.add_argument("--eval-epi", type=int, default=1)
-    parser.add_argument("--save-interval", type=int, default=10)
+    parser.add_argument("--save-interval", type=int, default=5)
 
     args = parser.parse_args()
     train(args)

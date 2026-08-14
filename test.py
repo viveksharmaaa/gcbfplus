@@ -58,7 +58,7 @@ class Args:
         assert self.area_size is not None, "area_size is required"
 
 
-args = Args(env ="DoubleIntegrator",algo = "gcbf_plus", area_size=4.0, num_agents=8, debug=True,epi =1, path = '/home/sharma/Projects/gcbfplus/pretrained/DoubleIntegrator/gcbf+',max_step=400)
+args = Args(env ="CrazyFlie",algo = "gcbf_plus", area_size=2.0, num_agents=8, debug=True,epi =1, path = '/home/sharma/Projects/gcbfplus/pretrained_diffuser/CrazyFlie/gcbfdiffuser',max_step=400)
 print(args.max_step)
 
 
@@ -311,8 +311,8 @@ def test(args):
 
 if __name__ == "__main__":
     with ipdb.launch_ipdb_on_exception():
-        args = Args(env="DoubleIntegrator", algo="gcbf_plus", area_size=4.0, num_agents=8, debug=True, epi=1,
-                    path='/home/sharma/Projects/gcbfplus/pretrained/DoubleIntegrator/gcbf+', max_step=400,nojit_rollout=True)
+        args = Args(env="CrazyFlie", algo="gcbf_plus", area_size=2.0, num_agents=8, debug=True, epi=1,
+                    path='/home/sharma/Projects/gcbfplus/pretrained_diffuser/CrazyFlie/gcbfdiffuser', max_step=400,nojit_rollout=True)
         print(args.max_step)
         test(args)
         # main()

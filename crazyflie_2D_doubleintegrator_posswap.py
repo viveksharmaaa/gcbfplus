@@ -15,6 +15,11 @@ from gcbfplus.algo import make_algo
 from gcbfplus.env import make_env
 from gcbfplus.utils.graph import GraphsTuple
 
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+})
+
 
 # ============================================================
 # CONFIGURATION
@@ -40,9 +45,10 @@ class Args:
     seed: int = 1234
     debug: bool = False
     cpu: bool = False
+    radius_ratio: float = 1.0
 
-    # Circular position-exchange task
-    radius_ratio: float = 0.35
+    # Circular position-exchange t
+
 
     save_animation: bool = True
     animation_file: str = "position_swap_graph.gif"
@@ -52,6 +58,8 @@ class Args:
     distance_plot_file: str = "per_agent_min_distance.png"
 
     results_file: str = "position_swap_graph.npz"
+    save_control_plot: bool = True
+    control_plot_file: str = "control_inputs.png"
 
     def __post_init__(self):
         assert self.num_agents % 2 == 0, (
@@ -81,41 +89,104 @@ def get_goal_ids(graph: GraphsTuple, num_agents: int) -> jnp.ndarray:
     )[0]
 
 
+# def make_position_swap_configuration(
+#     num_agents: int,
+#     area_size: float,
+#     radius_ratio: float,
+# ):
+#     """
+#     Agent i starts on a circle and targets the location initially
+#     occupied by agent i + N/2.
+#     """
+#     center = jnp.array([
+#         area_size / 2.0,
+#         area_size / 2.0,
+#     ])
+#
+#     radius = radius_ratio * area_size
+#
+#     theta = (
+#         2.0 * jnp.pi
+#         * jnp.arange(num_agents)
+#         / num_agents
+#     )
+#
+#     start_xy = center + radius * jnp.stack(
+#         [
+#             jnp.cos(theta),
+#             jnp.sin(theta),
+#         ],
+#         axis=1,
+#     )
+#
+#     goal_xy = jnp.roll(
+#         start_xy,
+#         shift=num_agents // 2,
+#         axis=0,
+#     )
+#
+#     return start_xy, goal_xy
+
 def make_position_swap_configuration(
     num_agents: int,
     area_size: float,
     radius_ratio: float,
 ):
     """
-    Agent i starts on a circle and targets the location initially
-    occupied by agent i + N/2.
+    Fixed 8-agent square-and-diamond swap configuration.
+
+    Workspace center:
+        (0, 0)
+
+    Outer square side length:
+        2 m
+
+    Inner diamond side length:
+        approximately 1 m
+
+    Swap pairs:
+        cf1 <-> cf3
+        cf2 <-> cf4
+        cf5 <-> cf7
+        cf6 <-> cf8
+
+    area_size and radius_ratio are retained only for compatibility
+    with the existing function call.
     """
-    center = jnp.array([
-        area_size / 2.0,
-        area_size / 2.0,
-    ])
+    if num_agents != 8:
+        raise ValueError(
+            "This fixed configuration requires exactly 8 agents."
+        )
 
-    radius = radius_ratio * area_size
-
-    theta = (
-        2.0 * jnp.pi
-        * jnp.arange(num_agents)
-        / num_agents
-    )
-
-    start_xy = center + radius * jnp.stack(
+    start_xy = jnp.array(
         [
-            jnp.cos(theta),
-            jnp.sin(theta),
+            [-1.000, -1.000],  # cf1
+            [-1.000,  1.000],  # cf2
+            [ 1.000,  1.000],  # cf3
+            [ 1.000, -1.000],  # cf4
+            [ 0.000, -0.707],  # cf5
+            [-0.707,  0.000],  # cf6
+            [ 0.000,  0.707],  # cf7
+            [ 0.707,  0.000],  # cf8
         ],
-        axis=1,
+        dtype=jnp.float32,
     )
 
-    goal_xy = jnp.roll(
-        start_xy,
-        shift=num_agents // 2,
-        axis=0,
+    swap_indices = jnp.array(
+        [
+            2,  # cf1 -> cf3
+            3,  # cf2 -> cf4
+            0,  # cf3 -> cf1
+            1,  # cf4 -> cf2
+            6,  # cf5 -> cf7
+            7,  # cf6 -> cf8
+            4,  # cf7 -> cf5
+            5,  # cf8 -> cf6
+        ],
+        dtype=jnp.int32,
     )
+
+    goal_xy = start_xy[swap_indices]
 
     return start_xy, goal_xy
 
@@ -326,8 +397,175 @@ def per_agent_min_distance(agent_states: np.ndarray) -> np.ndarray:
 
     return min_distances
 
-
 def plot_per_agent_min_distance(
+    results,
+    dt: float,
+    car_radius: float,
+    filename: str,
+):
+    """
+    Plot, for each agent i,
+
+        d_i(t) = min_{j != i} ||p_i(t) - p_j(t)||.
+
+    Each curve is labeled directly at its right endpoint using the
+    corresponding curve color.
+
+    The dashed red line denotes the physical collision boundary:
+
+        d_collision = 2 * car_radius.
+    """
+
+    distances = np.asarray(results["per_agent_min_distance"])
+    n_steps, n_agents = distances.shape
+
+    time = np.arange(n_steps) * dt
+
+    fig, ax = plt.subplots(figsize=(6, 2.5))
+
+    # ------------------------------------------------------------
+    # Plot one minimum-distance trajectory per Crazyflie
+    # ------------------------------------------------------------
+    lines = []
+
+    for i in range(n_agents):
+        line, = ax.plot(
+            time,
+            distances[:, i],
+            linewidth=2.0,
+        )
+        lines.append(line)
+
+    # ------------------------------------------------------------
+    # Collision boundary
+    # ------------------------------------------------------------
+    collision_distance = 2.0 * car_radius
+
+    ax.axhline(
+        collision_distance,
+        color="red",
+        linestyle="--",
+        linewidth=2.0,
+        label="Collision boundary",
+    )
+
+    # ------------------------------------------------------------
+    # Color-coded labels at right endpoints
+    # ------------------------------------------------------------
+    final_y = distances[-1, :].copy()
+
+    # Sort agents by final vertical position
+    order = np.argsort(final_y)
+
+    # Adjust label locations to prevent overlap
+    adjusted_y = final_y.copy()
+
+    y_range = max(
+        float(np.max(distances) - np.min(distances)),
+        1e-6,
+    )
+
+    label_gap = 0.05 * y_range
+
+    for k in range(1, len(order)):
+        previous_agent = order[k - 1]
+        current_agent = order[k]
+
+        if (
+            adjusted_y[current_agent]
+            - adjusted_y[previous_agent]
+            < label_gap
+        ):
+            adjusted_y[current_agent] = (
+                adjusted_y[previous_agent] + label_gap
+            )
+
+    # Position labels slightly outside the trajectory region
+    if len(time) > 1:
+        time_range = time[-1] - time[0]
+    else:
+        time_range = dt
+
+    x_label = time[-1] + 0.035 * time_range
+
+    for i, line in enumerate(lines):
+        ax.text(
+            x_label,
+            adjusted_y[i],
+            f"cf{i + 1}",
+            color=line.get_color(),
+            fontsize=9,
+            fontweight="bold",
+            verticalalignment="center",
+            horizontalalignment="left",
+            clip_on=False,
+        )
+
+        # Optional small connector between curve endpoint and label
+        if abs(adjusted_y[i] - final_y[i]) > 1e-8:
+            ax.plot(
+                [time[-1], x_label],
+                [final_y[i], adjusted_y[i]],
+                color=line.get_color(),
+                linewidth=0.8,
+                alpha=0.7,
+                clip_on=False,
+            )
+
+    # ------------------------------------------------------------
+    # Axes formatting
+    # ------------------------------------------------------------
+    ax.set_xlabel(r"Time (s)")
+    ax.set_ylabel(r"Minimum distance (m)")
+    ax.set_title(r"Minimum Distance to Other Agents")
+
+    ax.grid(False)
+
+    # Leave room for endpoint labels
+    ax.set_xlim(
+        time[0],
+        time[-1] + 0.12 * time_range,
+    )
+
+    # Make sure shifted labels remain inside vertical range
+    ymin = min(
+        float(np.min(distances)),
+        collision_distance,
+    )
+
+    ymax = max(
+        float(np.max(distances)),
+        float(np.max(adjusted_y)),
+    )
+
+    margin = 0.08 * max(ymax - ymin, 1e-3)
+
+    ax.set_ylim(
+        max(0.0, ymin - margin),
+        ymax + margin,
+    )
+
+    # Only show collision boundary in legend
+    ax.legend(
+        fontsize=8,
+        loc="upper right",
+        frameon=True,
+    )
+
+    fig.tight_layout()
+
+    fig.savefig(
+        filename,
+        dpi=300,
+        bbox_inches="tight",
+    )
+
+    plt.close(fig)
+
+    print(f"Saved minimum-distance plot: {filename}")
+
+
+def plot_per_agent_min_distance_(
     results,
     dt: float,
     car_radius: float,
@@ -346,14 +584,14 @@ def plot_per_agent_min_distance(
     n_steps, n_agents = distances.shape
     time = np.arange(n_steps) * dt
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fig, ax = plt.subplots(figsize=(6, 2.0))
 
     for i in range(n_agents):
         ax.plot(
             time,
             distances[:, i],
             linewidth=2.0,
-            label=str(i),
+            #label=str(i),
         )
 
     ax.axhline(
@@ -364,23 +602,143 @@ def plot_per_agent_min_distance(
         label="Collision boundary",
     )
 
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Min distance (m)")
-    ax.set_title("Minimum Distance to Other Agents")
-    ax.grid(True, alpha=0.30)
+    ax.set_xlabel(r"t(s)")
+    ax.set_ylabel(r"Minimum distance (m)")
+    ax.set_title(r"Minimum Distance to Other Agents")
+    ax.grid(False, alpha=0.30)
 
-    ax.legend(
-        title="Agent",
-        ncol=2,
+    # ax.legend(
+    #     fontsize=9,
+    #     loc="upper right",
+    # )
+
+    legend = ax.legend(
         fontsize=9,
         loc="upper right",
+        frameon=False,
     )
+
+    legend.get_frame().set_facecolor("none")
+    legend.get_frame().set_edgecolor("none")
+
+
+
+    # ax.set_xlabel("Time (s)")
+    # ax.set_ylabel("Min distance (m)")
+    # ax.set_title("Minimum Distance to Other Agents")
+    # ax.grid(False, alpha=0.30)
+
+    # ax.legend(
+    #      title="Agent",
+    #      ncol=2,
+    #     fontsize=9,
+    #     loc="upper right",
+    # )
 
     fig.tight_layout()
     fig.savefig(filename, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     print(f"Saved minimum-distance plot: {filename}")
+
+
+def plot_control_inputs(
+    results,
+    dt: float,
+    action_limit: float,
+    filename: str,
+):
+    """
+    Plot the commanded acceleration for every agent.
+
+    For the DoubleIntegrator:
+        u_i = [a_x, a_y]
+
+    Dashed lines indicate the actuator limits.
+    """
+    actions = np.asarray(results["actions"])
+    # shape: [n_steps, n_agents, 2]
+
+    n_steps, n_agents, action_dim = actions.shape
+    time = np.arange(n_steps) * dt
+
+    fig, axes = plt.subplots(
+        2,
+        1,
+        figsize=(6, 3.5),
+        sharex=True,
+    )
+
+    # --------------------------------------------------------
+    # x acceleration
+    # --------------------------------------------------------
+    for i in range(n_agents):
+        axes[0].plot(
+            time,
+            actions[:, i, 0],
+            linewidth=1.5,
+        )
+
+    axes[0].axhline(
+        action_limit,
+        color="red",
+        linestyle="--",
+        linewidth=1.5,
+    )
+
+    axes[0].axhline(
+        -action_limit,
+        color="red",
+        linestyle="--",
+        linewidth=1.5,
+    )
+
+    axes[0].set_ylabel(r"$f_x$ (N)")
+    axes[0].grid(False)
+
+    # --------------------------------------------------------
+    # y acceleration
+    # --------------------------------------------------------
+    for i in range(n_agents):
+        axes[1].plot(
+            time,
+            actions[:, i, 1],
+            linewidth=1.5,
+        )
+
+    axes[1].axhline(
+        action_limit,
+        color="red",
+        linestyle="--",
+        linewidth=1.5,
+        label="Actuation limit",
+    )
+
+    axes[1].axhline(
+        -action_limit,
+        color="red",
+        linestyle="--",
+        linewidth=1.5,
+    )
+
+    axes[1].set_xlabel(r"Time (s)")
+    axes[1].set_ylabel(r"$f_y$ (N)")
+    axes[1].grid(False)
+
+    axes[1].legend(
+        fontsize=8,
+        loc="upper right",
+    )
+
+    fig.tight_layout()
+    fig.savefig(
+        filename,
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.close(fig)
+
+    print(f"Saved control-input plot: {filename}")
 
 
 # ============================================================
@@ -536,8 +894,8 @@ def animate_position_swap_graph(
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    ax.set_xlim(0.0, area_size)
-    ax.set_ylim(0.0, area_size)
+    ax.set_xlim(-1.5,1.5)
+    ax.set_ylim(-1.5,1.5)
     ax.set_aspect("equal")
 
     ax.set_xlabel("x [m]")
@@ -894,12 +1252,25 @@ def test(args: Args):
         if key != "graph_log"
     }
 
-    np.savez(
-        args.results_file,
-        **results_to_save,
-    )
+    # step_dir = os.path.join("plots", str(step))
+    # os.makedirs(step_dir, exist_ok=True)
+    #
+    # animation_file = os.path.join(
+    #     step_dir,
+    #     args.animation_file,
+    # )
+    #
+    # distance_plot_file = os.path.join(
+    #     step_dir,
+    #    args.distance_plot_file,
+    # )
 
-    print(f"Saved rollout data: {args.results_file}")
+    # np.savez(
+    #     args.results_file,
+    #     **results_to_save,
+    # )
+
+    # print(f"Saved rollout data: {args.results_file}")
 
     if args.save_animation:
         animate_position_swap_graph(
@@ -917,6 +1288,13 @@ def test(args: Args):
             car_radius=float(env._params["car_radius"]), # Physical radius of one agent in the DoubleIntegrator environment. The plot uses 2 * car_radius as the centre-to-centre collision distance: two circular agents touch when their centres are separated by this amount.
             filename=args.distance_plot_file,
         )
+    if args.save_control_plot:
+        plot_control_inputs(
+            results=results,
+            dt=float(env.dt),
+            action_limit=0.075,  # use actual training/hardware accel bound
+            filename=args.control_plot_file,
+        )
 
     return results
 
@@ -931,19 +1309,73 @@ if __name__ == "__main__":
         algo="gcbf_diffuser",
         num_agents=8,
         obs=0,
-        area_size=4.0,
+        area_size=2.0,
         max_step=400,
         debug=False,
         path=(
-            "/home/sharma/Projects/gcbfplus/pretrained_diffuser/"
-            "DoubleIntegrator/gcbfdiffuser"
+            "/home/sharma/Projects/gcbfplus/logs/DoubleIntegrator/gcbf+/seed0_20260805162318_car0.1_accN_2.5" #cbfdiffuser"
+            # "/home/sharma/Projects/gcbfplus/pretrained_diffuser/"
+            # "DoubleIntegrator/gcbfdiffuser"  # cbfdiffuser"
+
+
         ),
-        radius_ratio=0.35,
         save_animation=True,
         animation_file="crazyflie_2D_doubleintegrator_position_swap.gif",
         save_distance_plot=True,
         distance_plot_file="crazyflie_2D_doubleintegrator_per_agent_min_distance.png",
         results_file="crazyflie_2D_doubleintegrator_position_swap.npz",
+        radius_ratio=0.0175,
+        step = 990
     )
+    # args.animation_file =  f"crazyflie_2D_doubleintegrator_position_swap_{args.step}.gif"
+    # args.distance_plot_file = f"crazyflie_2D_doubleintegrator_per_agent_min_distance_{args.step}.png"
+    # results = test(args)
+    steps =  [150, 305,525, 800, 840,860,910,920,980] #range(0, 1000, 5)
 
-    results = test(args)
+    for step in steps:
+        print("\n" + "=" * 80)
+        print(f"Evaluating checkpoint {step}")
+        print("=" * 80)
+
+        args.step = step
+
+        step_dir = os.path.join(
+            "plots",
+            str(step),
+        )
+        os.makedirs(step_dir, exist_ok=True)
+
+        args.animation_file = os.path.join(
+            step_dir,
+            f"crazyflie_position_swap_step_{step}.gif",
+        )
+
+        args.distance_plot_file = os.path.join(
+            step_dir,
+            f"per_agent_min_distance_step_{step}.png",
+        )
+
+        args.results_file = os.path.join(
+            step_dir,
+            f"position_swap_results_step_{step}.npz",
+        )
+
+        args.control_plot_file = os.path.join(
+            step_dir,
+            f"control_inputs_step_{step}.png",
+        )
+
+        try:
+            results = test(args)
+
+        except FileNotFoundError as error:
+            print(
+                f"Skipping checkpoint {step}: "
+                f"{error}"
+            )
+
+        except Exception as error:
+            print(
+                f"Checkpoint {step} failed: "
+                f"{type(error).__name__}: {error}"
+            )

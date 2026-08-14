@@ -1,0 +1,73 @@
+fileversion: 3
+
+robots:
+  cf1:
+    enabled: true
+    uri: radio://0/75/2M/E7E7E7E701
+    initial_position: [1.0, 1.0, 0.05]
+    type: cf_vicon
+  cf2:
+    enabled: true
+    uri: radio://1/78/2M/E7E7E7E702
+    initial_position: [1.0, -1.0, 0.05]
+    type: cf_vicon
+  cf3:
+    enabled: true
+    uri: radio://2/81/2M/E7E7E7E703
+    initial_position: [-1.0, -1.0, 0.05]
+    type: cf_vicon
+  cf4:
+    enabled: true
+    uri: radio://3/84/2M/E7E7E7E704
+    initial_position: [-1.0, 1.0, 0.05]
+    type: cf_vicon
+  cf5:
+    enabled: true
+    uri: radio://4/87/2M/E7E7E7E705
+    initial_position: [0.0, 0.70710678, 0.05]
+    type: cf_vicon
+  cf6:
+    enabled: true
+    uri: radio://5/90/2M/E7E7E7E706
+    initial_position: [0.70710678, 0.0, 0.05]
+    type: cf_vicon
+  cf7:
+    enabled: true
+    uri: radio://6/93/2M/E7E7E7E707
+    initial_position: [0.0, -0.70710678, 0.05]
+    type: cf_vicon
+  cf8:
+    enabled: true
+    uri: radio://7/96/2M/E7E7E7E708
+    initial_position: [-0.70710678, 0.0, 0.05]
+    type: cf_vicon
+
+robot_types:
+  cf_vicon:
+    motion_capture:
+      tracking: "vendor"
+    big_quad: false
+    battery:
+      voltage_warning: 3.8
+      voltage_critical: 3.7
+
+all:
+  firmware_logging:
+    enabled: false
+    default_topics:
+      pose:
+        frequency: 50
+      status:
+        frequency: 1
+  firmware_params:
+    commander:
+      enHighLevel: 1
+    stabilizer:
+      estimator: 2
+      controller: 1
+    ctrlMel:
+      mass: 0.033
+    locSrv:
+      extPosStdDev: 1e-3
+      extQuatStdDev: 5e-2
+  reference_frame: "world"

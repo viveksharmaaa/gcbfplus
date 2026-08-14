@@ -7,4 +7,4 @@ figs
 videos/
 wandb/
 test_log.csv
-*.egg-info
+*.egg-info*.blend1
